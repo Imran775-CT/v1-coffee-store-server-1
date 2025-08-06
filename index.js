@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const { MongoClient, ServerApiVersion } = require("mongodb");
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -12,7 +13,7 @@ app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@coffeestore.vf4l8z4.mongodb.net/?retryWrites=true&w=majority&appName=coffeeStore`;
 
-console.log("Mongo URI from ENV:", uri); // debugging check
+console.log("Mongo URI from ENV:", uri); // Debugging purpose
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -24,18 +25,19 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
 
     const coffeesCollection = client.db("coffeeDB").collection("coffee");
 
+    const userCollection = client.db("coffeeDB").collection("users");
+
+    // 🔹 Get all coffees
     app.get("/coffees", async (req, res) => {
-      // const cursor = coffeesCollection.find();
-      // const result = await cursor.toArray();
       const result = await coffeesCollection.find().toArray();
       res.send(result);
     });
 
+    // 🔹 Get a single coffee by ID
     app.get("/coffees/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
@@ -43,18 +45,21 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/coffees", async (req, res) => {
+    // 🔹 Add a new coffee
+    app.post("/addCoffees", async (req, res) => {
       const newCoffee = req.body;
-      console.log(newCoffee);
+      console.log("New Coffee:", newCoffee);
       const result = await coffeesCollection.insertOne(newCoffee);
       res.send(result);
     });
 
+    // 🔹 Update a coffee by ID
     app.put("/coffees/:id", async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
       const options = { upsert: true };
       const updatedCoffee = req.body;
+
       const updatedDoc = {
         $set: {
           name: updatedCoffee.name,
@@ -72,33 +77,68 @@ async function run() {
         updatedDoc,
         options
       );
-
       res.send(result);
     });
 
-    app.delete("/coffee/:id", async (req, res) => {
+    // 🔹 Delete a coffee by ID (fixed to `/coffees/:id`)
+    app.delete("/coffees/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await coffeesCollection.deleteOne(query);
       res.send(result);
     });
 
-    // Send a ping to confirm a successful connection
+    // Users related API's
+    app.patch('/users', async(req, res) =>{
+      const email = req.body.email;
+      const filter = {email};
+      const updatedDoc = {
+        $set: {
+          lastSignInTime : req.body?.lastSignInTime
+        }
+      }
+
+      const result = await userCollection.updateOne(filter, updatedDoc)
+      res.send(result)
+    })
+
+    app.delete('/users/:id', async(req, res) =>{
+      const id = req.params.id;
+      const query = {_id: new ObjectId(id)};
+      const result = await userCollection.deleteOne(query)
+      res.send(result)
+    })
+
+    app.get('/users', async(req, res) =>{
+      const cursor = userCollection.find()
+      const result = await cursor.toArray();
+      res.send(result)
+    })
+
+    app.post("/users", async (req, res) => {
+      const newUser = req.body;
+      console.log("new user created", newUser);
+      const result = await userCollection.insertOne(newUser);
+      res.send(result);
+    });
+
+    // ✅ Connection ping test
     await client.db("admin").command({ ping: 1 });
     console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
+      "✅ Pinged your deployment. Successfully connected to MongoDB!"
     );
   } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
+    // await client.close(); // Disable for persistent server connection
   }
 }
 run().catch(console.dir);
 
+// Root Route
 app.get("/", (req, res) => {
   res.send("☕ Coffee making server is running!");
 });
 
+// Start server
 app.listen(port, () => {
   console.log(`🚀 Server is running on port: ${port}`);
 });
